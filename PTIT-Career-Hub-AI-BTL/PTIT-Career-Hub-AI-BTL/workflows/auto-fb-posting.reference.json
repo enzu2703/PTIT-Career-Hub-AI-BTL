@@ -1,0 +1,46 @@
+{
+  "name": "Auto FB posting",
+  "model": "google/gemini-3.7-flash",
+  "instructions": "Bạn là trợ lý quản lý Fanpage Facebook. Khi nhận được yêu cầu đăng bài hoặc đến giờ hẹn tự động, hãy gọi công cụ workflow Facebook Auto Posting AI Agent để thực hiện đăng bài, sau đó báo cáo ngắn gọn lại kết quả.",
+  "tools": [
+    {
+      "type": "workflow",
+      "workflowId": "RECONFIGURE_WORKFLOW_ID",
+      "workflow": "Facebook Auto Posting AI Agent",
+      "name": "Facebook Auto Posting AI Agent",
+      "description": "Sử dụng công cụ này khi cần lấy dữ liệu từ Google Sheets, tự động viết nội dung, tạo hình ảnh và đăng hoặc lên lịch bài viết lên Fanpage Facebook.",
+      "allOutputs": false
+    }
+  ],
+  "personalisation": {
+    "icon": "bot",
+    "gradient": {
+      "from": "#AA9100",
+      "to": "#9697FF",
+      "angle": 85,
+      "fromStop": 14,
+      "toStop": 91
+    }
+  },
+  "credential": "RECONFIGURE_CREDENTIAL",
+  "memory": {
+    "enabled": true,
+    "storage": "n8n"
+  },
+  "mcpServers": [],
+  "tasks": [
+    {
+      "type": "task",
+      "id": "RECONFIGURE_TASK_ID",
+      "enabled": true
+    }
+  ],
+  "providerTools": {},
+  "config": {
+    "webSearch": {
+      "enabled": false
+    }
+  },
+  "skills": [],
+  "integrations": []
+}

@@ -1,0 +1,562 @@
+{
+  "name": "Facebook Auto Posting Work Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "RECONFIGURE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Phân tích web"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Scheduled Posts"
+        },
+        "options": {}
+      },
+      "id": "f53ecc51-3ce5-4ec2-92ae-0aea0bf1c38f",
+      "name": "Read Scheduled Posts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        112,
+        192
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "time-match",
+              "leftValue": "={{ (() => {\n  const dateStr = String($json['Ngày đăng'] || '').trim();\n  const timeStr = String($json['Giờ đăng'] || '').trim();\n  \n  // Parse linh hoạt ngày (1 hoặc 2 chữ số) và giờ (1 hoặc 2 chữ số)\n  const t = DateTime.fromFormat(`${dateStr} ${timeStr}`, 'd/M/yyyy H:mm', { zone: 'Asia/Ho_Chi_Minh' });\n  \n  if (!t.isValid) return false;\n  \n  const now = DateTime.now().setZone('Asia/Ho_Chi_Minh');\n  const diff = now.diff(t, 'minutes').minutes;\n  \n  // Cho phép đăng nếu đã đến giờ và chưa trễ quá 60 phút (bạn có thể đổi số 60 theo lịch Schedule Trigger)\n  return diff >= 0 && diff <= 60;\n})() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3bf19e6d-b621-4efb-802e-6ce6d198a650",
+      "name": "Is Post Time",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        384,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v27.0/RECONFIGURE_PAGE_ID/photos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "published",
+              "value": "false"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ba0c8e48-0c38-4fc5-b67a-df1928dbd163",
+      "name": "Facebook Graph API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2448,
+        160
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Lấy dữ liệu của item hiện tại (chuẩn cho chế độ Run Once for Each Item)\nconst inputData = $input.item?.json || {};\n\n// 1. Lấy dữ liệu văn bản cần làm sạch\nconst raw = String(\n  inputData.content ||\n  inputData[\"Nội dung đầy đủ\"] ||\n  inputData.text ||\n  inputData.message?.content ||\n  \"\"\n);\n\n// 2. Xử lý làm sạch format Markdown nhưng giữ nguyên Hashtag\nconst cleaned = raw\n  .replace(/^#{1,6}\\s+/gm, \"\")\n  .replace(/\\*{1,3}([^*]+)\\*{1,3}/g, \"$1\")\n  .replace(/\\*/g, \"\")\n  .replace(/#(?=\\s|$)/g, \"\")\n  .replace(/^\\s*[-•]\\s+/gm, \"• \")\n  .replace(/_{1,2}([^_]+)_{1,2}/g, \"$1\")\n  .replace(/\\n{3,}/g, \"\\n\\n\")\n  .trim();\n\n// 3. Trả về trực tiếp 1 object (KHÔNG bọc dấu ngoặc vuông [] bên ngoài)\nreturn {\n  json: {\n    ...inputData,\n    content: cleaned,\n    platform: \"facebook\",\n   imageName: String(inputData[\"Ngày\"] || \"\").replaceAll(\"/\", \"-\") + \"_\" + String($('Read Scheduled Posts').item.json[\"Giờ đăng\"] || \"\").replaceAll(\":\", \"-\")\n  }\n};"
+      },
+      "id": "a9ed3d78-d919-4ae4-b664-d74dabdcb3ad",
+      "name": "Format Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "RECONFIGURE_SHEET_ID",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Final Content",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Ngày": "={{ new Date().toLocaleDateString(\"vi-VN\") }}",
+            "Nội dung đầy đủ": "={{ $json.output }}",
+            "Nội dung ngắn": "={{ $('Read Scheduled Posts').item.json['Nội dung'] }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Ngày",
+              "displayName": "Ngày",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Nội dung ngắn",
+              "displayName": "Nội dung ngắn",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Nội dung đầy đủ",
+              "displayName": "Nội dung đầy đủ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "8a0af74a-c309-436f-9c9e-396adc4fbe15",
+      "name": "Save to Final Content",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1328,
+        144
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "id": "41068b1c-4930-433d-8cee-49588ef2465f",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        816,
+        432
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Social Media Copywriter) chuyên viết cho cộng đồng sinh viên PTIT. Nhiệm vụ của bạn là từ chủ đề và hướng triển khai bên dưới, viết thành một bài đăng Facebook ngắn gọn, sắc bén và thu hút tương tác cao.\n\nYÊU CẦU NỘI DUNG:\n1. Bám sát chủ đề và hướng triển khai được giao. Tuyệt đối không rào đón dài dòng, không kể lể lan man hay lặp ý; mỗi câu đều phải mang lại thông tin hoặc giá trị thực tế.\n2. Cấu trúc gọn gàng 3 phần ngầm định:\n   - Câu mở đầu (Hook): 1 câu ngắn duy nhất đánh thẳng vào vấn đề hoặc tâm lý sinh viên để giữ chân người lướt.\n   - Thân bài: Tối đa 3-4 ý chính cực kỳ súc tích. Trình bày dạng danh sách dùng dấu chấm tròn (•) kèm emoji tinh tế ở đầu ý, mỗi ý chỉ dài 1-2 câu ngắn.\n   - Kết bài: 1 câu chốt hạ súc tích kèm lời kêu gọi tương tác nhẹ nhàng (CTA).\n3. Văn phong: Trẻ trung, thẳng thắn, thực tế như một người anh/chị đi trước chia sẻ kinh nghiệm xương máu (tránh văn mẫu sáo rỗng, giáo điều).\n4. Độ dài: Giới hạn nghiêm ngặt trong khoảng 120 - 180 từ (chưa tính hashtag).\n5. Hashtag: Xuống 2 dòng ở cuối bài và thêm 3 - 5 hashtag liên quan trực tiếp đến chủ đề (ví dụ: #PTIT #PTITCareerHub #DinhHuongNgheNghiep...).\n\nQUY TẮC ĐẦU RA (BẮT BUỘC):\n- Chỉ trả về duy nhất nội dung bài viết hoàn chỉnh kèm hashtag cuối bài.\n- TUYỆT ĐỐI KHÔNG thêm lời dẫn (như \"Dưới đây là bài viết...\"), không chèn nhãn cấu trúc (\"Mở bài:\", \"Thân bài:\", \"Kết bài:\"), không dùng định dạng Markdown (# tiêu đề, **in đậm**, *in nghiêng*, dấu gạch ngang -).\n\nChủ đề và hướng triển khai:\n\"\"\"{{ $json['Nội dung'] }}\"\"\"",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": ""
+        }
+      },
+      "id": "42a51dbe-5b67-409a-a747-97f3afca6209",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        784,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "={{ $('Format Content').item.json.imageName }}",
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "RECONFIGURE_DRIVE_FOLDER_ID",
+            "mode": "list",
+            "cachedResultName": "Anh_Ptitcareerhub"
+          }
+        },
+        "options": {
+          "fields": [
+            "id"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1952,
+        192
+      ],
+      "id": "3cf78de1-db56-4961-b46e-d49a70183198",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2176,
+        192
+      ],
+      "id": "108227e5-c58b-4dde-8aff-4f5e497c4ac5",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v27.0/RECONFIGURE_PAGE_ID/feed",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {{ JSON.stringify($('Format Content').item.json.content + \"\\n\\n👉 Khám phá ngay tại: https://ptitcareerhub.online/\") }},\n  \"attached_media\": [\n    {\n      \"media_fbid\": \"{{ $json.id }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2672,
+        160
+      ],
+      "id": "9fab3898-1432-4ac6-8736-a6282cb9c098",
+      "name": "HTTP Request",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "RECONFIGURE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Phân tích web"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 105052717,
+          "mode": "list",
+          "cachedResultName": "Bài đã đăng"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Nội dung": "={{ $('Format Content').item.json.content }}",
+            "Ngày đăng": "={{ $('Format Content').item.json['Ngày'] }}",
+            "Giờ đăng": "={{ $('Read Scheduled Posts').item.json['Giờ đăng'] }}",
+            "Link bài viết": "={{ \"https://www.facebook.com/\" + $json.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Nội dung",
+              "displayName": "Nội dung",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ngày đăng",
+              "displayName": "Ngày đăng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Giờ đăng",
+              "displayName": "Giờ đăng",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Link bài viết",
+              "displayName": "Link bài viết",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2896,
+        160
+      ],
+      "id": "83591512-f50f-4222-9159-4fe329d71306",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "RECONFIGURE_CREDENTIAL",
+          "name": "RECONFIGURE_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "request"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        208
+      ],
+      "id": "d0aeb40b-c51c-4be2-bdc6-9bab4fd283f9",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Read Scheduled Posts": {
+      "main": [
+        [
+          {
+            "node": "Is Post Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Post Time": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook Graph API": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Content": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Final Content": {
+      "main": [
+        [
+          {
+            "node": "Format Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Save to Final Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Facebook Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read Scheduled Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "RECONFIGURE_VERSION_ID",
+  "meta": {
+    "sanitized": true,
+    "note": "Reference only; reconfigure resources/credentials before import."
+  },
+  "nodeGroups": [],
+  "id": "RECONFIGURE_WORKFLOW_ID",
+  "tags": []
+}
